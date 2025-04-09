@@ -5,7 +5,7 @@ const bookingSchema = new mongoose.Schema({
   room: { type: mongoose.Schema.Types.ObjectId, ref: 'Room', required: true },  // Reference to the room that was booked
   checkInDate: { type: Date, required: true },
   checkOutDate: { type: Date, required: true },
-  status: { type: String, enum: ['pending', 'confirmed', 'cancelled'], default: 'pending' },
-});
+  status: { type: String, enum: ['pending', 'confirmed', 'rejected', 'cancelled'], default: 'pending' },
+}, { timestamps: true });  
 
 module.exports = mongoose.model('Booking', bookingSchema);

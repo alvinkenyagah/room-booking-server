@@ -42,12 +42,10 @@ const protect = async (req, res, next) => {
       // Verify token
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       
-      // Log the decoded token for debugging
-      console.log('Decoded token:', decoded);
+  
 
       // Check if the token contains a user ID
       if (!decoded.id && !decoded.userId) {
-        console.error('No user ID found in token');
         return res.status(401).json({ message: 'Invalid token structure' });
       }
 
@@ -58,7 +56,6 @@ const protect = async (req, res, next) => {
       const user = await User.findById(userId).select('-password');
       
       if (!user) {
-        console.error(`User not found with ID: ${userId}`);
         return res.status(401).json({ message: 'User not found' });
       }
 
@@ -71,7 +68,6 @@ const protect = async (req, res, next) => {
 
       next();
     } catch (error) {
-      console.error('Authentication error details:', error);
       return res.status(401).json({ 
         message: 'Authentication failed', 
         error: error.message 

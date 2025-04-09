@@ -30,23 +30,6 @@
 //   }
 // };
 
-// // Cancel a booking
-// const cancelBooking = async (req, res) => {
-//   const { bookingId } = req.params;
-
-//   try {
-//     const booking = await Booking.findById(bookingId);
-//     if (!booking) {
-//       return res.status(404).json({ message: 'Booking not found' });
-//     }
-
-//     booking.status = 'cancelled';
-//     await booking.save();
-//     res.status(200).json({ message: 'Booking cancelled', booking });
-//   } catch (err) {
-//     res.status(500).json({ message: 'Server error', error: err.message });
-//   }
-// };
 
 // // Admin approves a booking
 // const approveBooking = async (req, res) => {
@@ -162,6 +145,26 @@ const getUserBookings = async (req, res) => {
   }
 };
 
+
+// // Cancel a booking
+const cancelBooking = async (req, res) => {
+  const { bookingId } = req.params;
+
+  try {
+    const booking = await Booking.findById(bookingId);
+    if (!booking) {
+      return res.status(404).json({ message: 'Booking not found' });
+    }
+
+    booking.status = 'cancelled';
+    await booking.save();
+    res.status(200).json({ message: 'Booking cancelled', booking });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
+
 // Get all bookings (admin only)
 const getAllBookings = async (req, res) => {
   try {
@@ -173,36 +176,6 @@ const getAllBookings = async (req, res) => {
     res.status(200).json(bookings);
   } catch (err) {
     console.error('Get all bookings error:', err);
-    res.status(500).json({ message: 'Server error', error: err.message });
-  }
-};
-
-// Cancel a booking
-const cancelBooking = async (req, res) => {
-  const { bookingId } = req.params;
-
-  try {
-    const booking = await Booking.findById(bookingId);
-    if (!booking) {
-      return res.status(404).json({ message: 'Booking not found' });
-    }
-    
-    // Check if user is authorized to cancel this booking
-    if (booking.user.toString() !== req.user.id && !req.user.isAdmin) {
-      return res.status(403).json({ message: 'Not authorized to cancel this booking' });
-    }
-
-    // Only allow cancellation of pending or confirmed bookings
-    if (booking.status === 'cancelled') {
-      return res.status(400).json({ message: 'Booking is already cancelled' });
-    }
-
-    booking.status = 'cancelled';
-    await booking.save();
-    
-    res.status(200).json({ message: 'Booking cancelled successfully', booking });
-  } catch (err) {
-    console.error('Cancel booking error:', err);
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 };
@@ -254,10 +227,58 @@ const approveBooking = async (req, res) => {
   }
 };
 
+// Admin reject a booking
+const rejectBooking = async (req, res) => {
+  const { bookingId } = req.params;
+
+  try {
+    const booking = await Booking.findById(bookingId).populate('room');
+    if (!booking) {
+      return res.status(404).json({ message: 'Booking not found' });
+    }
+
+    if (booking.status !== 'pending') {
+      return res.status(400).json({ message: 'Booking is not in a pending state' });
+    }
+
+    // Check if room is still available for these dates before confirming
+    const conflictingBookings = await Booking.find({
+      _id: { $ne: bookingId }, // Exclude current booking
+      room: booking.room._id,
+      status: 'confirmed',
+      $or: [
+        { 
+          checkInDate: { $lt: booking.checkOutDate },
+          checkOutDate: { $gt: booking.checkInDate }
+        }
+      ]
+    });
+
+    if (conflictingBookings.length > 0) {
+      return res.status(400).json({ 
+        message: 'Room is no longer available for these dates',
+        conflicts: conflictingBookings
+      });
+    }
+
+    booking.status = 'rejected';
+    await booking.save();
+    
+    // Populate user and room details
+    await booking.populate('user');
+    
+    res.status(200).json({ message: 'Booking rejected successfully', booking });
+  } catch (err) {
+    console.error('Reject booking error:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
 module.exports = {
   createBooking,
   getUserBookings,
   getAllBookings,
   cancelBooking,
-  approveBooking
+  approveBooking,
+  rejectBooking
 };
