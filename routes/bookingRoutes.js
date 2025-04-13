@@ -6,7 +6,8 @@ const {
   getAllBookings,
   cancelBooking, 
   approveBooking,
-  rejectBooking
+  rejectBooking,
+  deleteBooking
 } = require('../controllers/bookingController');
 const { protect, isAdmin } = require('../middleware/authMiddleware');
 
@@ -17,7 +18,7 @@ router.use(protect);
 router.post('/', createBooking);  // Create a new booking
 router.get('/user', getUserBookings);  // Get all bookings for the authenticated user
 
-// router.delete('/cancel/:bookingId', cancelBooking);  // Cancel a booking
+router.delete('/delete/:bookingId', deleteBooking);  // delete a booking
 router.put('/cancel/:bookingId', cancelBooking);  // Cancel a booking
 // Admin routes
 router.get('/all', isAdmin, getAllBookings);  // Admin gets all bookings

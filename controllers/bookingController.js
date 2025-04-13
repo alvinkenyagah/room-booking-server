@@ -1,65 +1,3 @@
-// const Booking = require('../models/Booking');
-
-// // Create a new booking
-// const createBooking = async (req, res) => {
-//   const { roomId, checkInDate, checkOutDate } = req.body;
-
-//   try {
-//     const booking = new Booking({
-//       user: req.user.id, // assumes you're using auth middleware
-//       room: roomId,
-//       checkInDate,
-//       checkOutDate,
-//       status: 'pending',
-//     });
-
-//     await booking.save();
-//     res.status(201).json(booking);
-//   } catch (err) {
-//     res.status(500).json({ message: 'Server error', error: err.message });
-//   }
-// };
-
-// // Get bookings for a user
-// const getUserBookings = async (req, res) => {
-//   try {
-//     const bookings = await Booking.find({ user: req.user.id }).populate('room');
-//     res.status(200).json(bookings);
-//   } catch (err) {
-//     res.status(500).json({ message: 'Server error', error: err.message });
-//   }
-// };
-
-
-// // Admin approves a booking
-// const approveBooking = async (req, res) => {
-//   const { bookingId } = req.params;
-
-//   try {
-//     const booking = await Booking.findById(bookingId);
-//     if (!booking) {
-//       return res.status(404).json({ message: 'Booking not found' });
-//     }
-
-//     if (booking.status !== 'pending') {
-//       return res.status(400).json({ message: 'Booking is not in a pending state' });
-//     }
-
-//     booking.status = 'confirmed';
-//     await booking.save();
-//     res.status(200).json({ message: 'Booking confirmed successfully', booking });
-//   } catch (err) {
-//     res.status(500).json({ message: 'Server error', error: err.message });
-//   }
-// };
-
-// module.exports = {
-//   createBooking,
-//   getUserBookings,
-//   cancelBooking,
-//   approveBooking
-// };
-
 const Booking = require('../models/Booking');
 const Room = require('../models/Room'); // Assuming you have a Room model
 
@@ -146,7 +84,7 @@ const getUserBookings = async (req, res) => {
 };
 
 
-// // Cancel a booking
+// Cancel a booking
 const cancelBooking = async (req, res) => {
   const { bookingId } = req.params;
 
@@ -274,11 +212,55 @@ const rejectBooking = async (req, res) => {
   }
 };
 
+// Delete a booking (for both admin and user)
+const deleteBooking = async (req, res) => {
+  const { bookingId } = req.params;
+
+  try {
+    const booking = await Booking.findById(bookingId);
+    
+    if (!booking) {
+      return res.status(404).json({ message: 'Booking not found' });
+    }
+
+    // Security check: Only allow users to delete their own bookings
+    // Admins can delete any booking (this assumes req.user has isAdmin property)
+    if (!req.user.isAdmin && booking.user.toString() !== req.user.id) {
+      return res.status(403).json({ 
+        message: 'Access denied. You can only delete your own bookings.' 
+      });
+    }
+
+    // Check if booking can be deleted (e.g., not allowing deletion of active bookings)
+    const currentDate = new Date();
+    const checkInDate = new Date(booking.checkInDate);
+    
+    // Don't allow deletion of bookings that are confirmed and already started
+    if (booking.status === 'confirmed' && checkInDate <= currentDate) {
+      return res.status(400).json({ 
+        message: 'Cannot delete an active or completed booking' 
+      });
+    }
+
+    // Perform the actual deletion
+    await Booking.findByIdAndDelete(bookingId);
+    
+    res.status(200).json({ 
+      message: 'Booking deleted successfully',
+      deletedBookingId: bookingId
+    });
+  } catch (err) {
+    console.error('Delete booking error:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
 module.exports = {
   createBooking,
   getUserBookings,
   getAllBookings,
   cancelBooking,
   approveBooking,
-  rejectBooking
+  rejectBooking,
+  deleteBooking
 };
