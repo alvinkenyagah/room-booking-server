@@ -1,18 +1,42 @@
 const Booking = require('../models/Booking');
-const Room = require('../models/Room'); // Assuming you have a Room model
+const Room = require('../models/Room'); 
+
+// Helper function to combine date and time
+function combineDateAndTime(dateStr, timeStr) {
+  const date = new Date(dateStr);
+  const [hours, minutes] = timeStr.split(':').map(Number);
+  
+  date.setHours(hours, minutes, 0, 0);
+  return date;
+}
+
+// Calculate duration in days between two dates (including partial days)
+function calculateDurationInDays(checkIn, checkOut) {
+  // Calculate duration in milliseconds
+  const durationMs = checkOut.getTime() - checkIn.getTime();
+  // Convert to days (can be fractional for partial days)
+  return durationMs / (1000 * 60 * 60 * 24);
+}
 
 // Create a new booking
 const createBooking = async (req, res) => {
-  const { roomId, checkInDate, checkOutDate } = req.body;
+  const { 
+    roomId, 
+    checkInDate, 
+    checkInTime = '14:00', // Default check-in time (2 PM)
+    checkOutDate, 
+    checkOutTime = '11:00'  // Default check-out time (11 AM)
+  } = req.body;
 
   try {
-    // Validate dates
-    const checkIn = new Date(checkInDate);
-    const checkOut = new Date(checkOutDate);
+    // Combine date and time
+    const checkIn = combineDateAndTime(checkInDate, checkInTime);
+    const checkOut = combineDateAndTime(checkOutDate, checkOutTime);
     
+    // Validate dates
     if (checkIn >= checkOut) {
       return res.status(400).json({ 
-        message: 'Check-out date must be after check-in date' 
+        message: 'Check-out date/time must be after check-in date/time' 
       });
     }
     
@@ -35,26 +59,31 @@ const createBooking = async (req, res) => {
       $or: [
         // Check if requested dates overlap with existing bookings
         { 
-          checkInDate: { $lt: checkOutDate },
-          checkOutDate: { $gt: checkInDate }
+          checkInDate: { $lt: checkOut },
+          checkOutDate: { $gt: checkIn }
         }
       ]
     });
 
     if (conflictingBookings.length > 0) {
       return res.status(400).json({ 
-        message: 'Room is not available for the selected dates',
+        message: 'Room is not available for the selected dates/times',
         conflicts: conflictingBookings
       });
     }
+
+    // Calculate duration and total cost
+    const durationInDays = calculateDurationInDays(checkIn, checkOut);
+    const totalCost = durationInDays * room.price;
 
     // Create the booking
     const booking = new Booking({
       user: req.user.id,
       room: roomId,
-      checkInDate,
-      checkOutDate,
+      checkInDate: checkIn,
+      checkOutDate: checkOut,
       status: 'pending',
+      totalCost: totalCost
     });
 
     await booking.save();
@@ -62,7 +91,11 @@ const createBooking = async (req, res) => {
     // Populate room details for response
     await booking.populate('room');
     
-    res.status(201).json(booking);
+    res.status(201).json({
+      ...booking.toJSON(),
+      durationInDays,
+      roomPrice: room.price
+    });
   } catch (err) {
     console.error('Booking creation error:', err);
     res.status(500).json({ message: 'Server error', error: err.message });
@@ -76,13 +109,24 @@ const getUserBookings = async (req, res) => {
       .populate('room')
       .populate('user', 'email name'); // Only include email and name fields
     
-    res.status(200).json(bookings);
+    // Add duration calculation to each booking
+    const bookingsWithDuration = bookings.map(booking => {
+      const durationInDays = calculateDurationInDays(
+        new Date(booking.checkInDate), 
+        new Date(booking.checkOutDate)
+      );
+      return {
+        ...booking.toJSON(),
+        durationInDays
+      };
+    });
+    
+    res.status(200).json(bookingsWithDuration);
   } catch (err) {
     console.error('Get user bookings error:', err);
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 };
-
 
 // Cancel a booking
 const cancelBooking = async (req, res) => {
@@ -96,12 +140,24 @@ const cancelBooking = async (req, res) => {
 
     booking.status = 'cancelled';
     await booking.save();
-    res.status(200).json({ message: 'Booking cancelled', booking });
+    
+    // Add duration calculation
+    const durationInDays = calculateDurationInDays(
+      new Date(booking.checkInDate), 
+      new Date(booking.checkOutDate)
+    );
+    
+    res.status(200).json({ 
+      message: 'Booking cancelled', 
+      booking: {
+        ...booking.toJSON(),
+        durationInDays
+      }
+    });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 };
-
 
 // Get all bookings (admin only)
 const getAllBookings = async (req, res) => {
@@ -111,7 +167,19 @@ const getAllBookings = async (req, res) => {
       .populate('user', 'email name')
       .sort({ createdAt: -1 }); // Sort by latest first
     
-    res.status(200).json(bookings);
+    // Add duration calculation to each booking
+    const bookingsWithDuration = bookings.map(booking => {
+      const durationInDays = calculateDurationInDays(
+        new Date(booking.checkInDate), 
+        new Date(booking.checkOutDate)
+      );
+      return {
+        ...booking.toJSON(),
+        durationInDays
+      };
+    });
+    
+    res.status(200).json(bookingsWithDuration);
   } catch (err) {
     console.error('Get all bookings error:', err);
     res.status(500).json({ message: 'Server error', error: err.message });
@@ -158,14 +226,26 @@ const approveBooking = async (req, res) => {
     // Populate user and room details
     await booking.populate('user');
     
-    res.status(200).json({ message: 'Booking confirmed successfully', booking });
+    // Add duration calculation
+    const durationInDays = calculateDurationInDays(
+      new Date(booking.checkInDate), 
+      new Date(booking.checkOutDate)
+    );
+    
+    res.status(200).json({ 
+      message: 'Booking confirmed successfully', 
+      booking: {
+        ...booking.toJSON(),
+        durationInDays
+      }
+    });
   } catch (err) {
     console.error('Approve booking error:', err);
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 };
 
-// Admin reject a booking
+// Admin rejects a booking
 const rejectBooking = async (req, res) => {
   const { bookingId } = req.params;
 
@@ -179,33 +259,25 @@ const rejectBooking = async (req, res) => {
       return res.status(400).json({ message: 'Booking is not in a pending state' });
     }
 
-    // Check if room is still available for these dates before confirming
-    const conflictingBookings = await Booking.find({
-      _id: { $ne: bookingId }, // Exclude current booking
-      room: booking.room._id,
-      status: 'confirmed',
-      $or: [
-        { 
-          checkInDate: { $lt: booking.checkOutDate },
-          checkOutDate: { $gt: booking.checkInDate }
-        }
-      ]
-    });
-
-    if (conflictingBookings.length > 0) {
-      return res.status(400).json({ 
-        message: 'Room is no longer available for these dates',
-        conflicts: conflictingBookings
-      });
-    }
-
     booking.status = 'rejected';
     await booking.save();
     
     // Populate user and room details
     await booking.populate('user');
     
-    res.status(200).json({ message: 'Booking rejected successfully', booking });
+    // Add duration calculation
+    const durationInDays = calculateDurationInDays(
+      new Date(booking.checkInDate), 
+      new Date(booking.checkOutDate)
+    );
+    
+    res.status(200).json({ 
+      message: 'Booking rejected successfully', 
+      booking: {
+        ...booking.toJSON(),
+        durationInDays
+      }
+    });
   } catch (err) {
     console.error('Reject booking error:', err);
     res.status(500).json({ message: 'Server error', error: err.message });
@@ -242,15 +314,68 @@ const deleteBooking = async (req, res) => {
       });
     }
 
+    // Get booking details before deletion for the response
+    const bookingDetails = {
+      ...booking.toJSON(),
+      durationInDays: calculateDurationInDays(
+        new Date(booking.checkInDate), 
+        new Date(booking.checkOutDate)
+      )
+    };
+
     // Perform the actual deletion
     await Booking.findByIdAndDelete(bookingId);
     
     res.status(200).json({ 
       message: 'Booking deleted successfully',
-      deletedBookingId: bookingId
+      deletedBooking: bookingDetails
     });
   } catch (err) {
     console.error('Delete booking error:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
+// Calculate booking cost (without creating a booking)
+const calculateBookingCost = async (req, res) => {
+  const { 
+    roomId, 
+    checkInDate, 
+    checkInTime = '14:00',  // Default check-in time 
+    checkOutDate, 
+    checkOutTime = '11:00'  // Default check-out time
+  } = req.body;
+  
+  try {
+    const room = await Room.findById(roomId);
+    if (!room) {
+      return res.status(404).json({ message: 'Room not found' });
+    }
+    
+    const checkIn = combineDateAndTime(checkInDate, checkInTime);
+    const checkOut = combineDateAndTime(checkOutDate, checkOutTime);
+    
+    if (checkIn >= checkOut) {
+      return res.status(400).json({ 
+        message: 'Check-out date/time must be after check-in date/time' 
+      });
+    }
+    
+    // Calculate duration and cost
+    const durationInDays = calculateDurationInDays(checkIn, checkOut);
+    const totalCost = durationInDays * room.price;
+    
+    res.json({
+      roomId,
+      roomName: room.name,
+      roomPrice: room.price,
+      checkInDate: checkIn,
+      checkOutDate: checkOut,
+      durationInDays,
+      totalCost
+    });
+  } catch (err) {
+    console.error('Error calculating booking cost:', err);
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 };
@@ -262,5 +387,6 @@ module.exports = {
   cancelBooking,
   approveBooking,
   rejectBooking,
-  deleteBooking
+  deleteBooking,
+  calculateBookingCost
 };

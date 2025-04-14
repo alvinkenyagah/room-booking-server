@@ -12,7 +12,18 @@ const getAllRooms = async (req, res) => {
 
 // Create a new room (Admin only)
 const createRoom = async (req, res) => {
-  const { name, description, price, available, images } = req.body;
+  const {
+    name,
+    description,
+    price,
+    available,
+    images,
+    roomType,
+    capacity,
+    amenities,
+    floorLevel,
+    bedType,
+  } = req.body;
 
   try {
     const newRoom = new Room({
@@ -21,6 +32,11 @@ const createRoom = async (req, res) => {
       price,
       available,
       images,
+      roomType,
+      capacity,
+      amenities,
+      floorLevel,
+      bedType,
     });
 
     await newRoom.save();
@@ -33,12 +49,34 @@ const createRoom = async (req, res) => {
 // Update an existing room (Admin only)
 const updateRoom = async (req, res) => {
   const { id } = req.params;
-  const { name, description, price, available, images } = req.body;
+  const {
+    name,
+    description,
+    price,
+    available,
+    images,
+    roomType,
+    capacity,
+    amenities,
+    floorLevel,
+    bedType,
+  } = req.body;
 
   try {
     const updatedRoom = await Room.findByIdAndUpdate(
       id,
-      { name, description, price, available, images },
+      {
+        name,
+        description,
+        price,
+        available,
+        images,
+        roomType,
+        capacity,
+        amenities,
+        floorLevel,
+        bedType,
+      },
       { new: true }
     );
 
@@ -51,6 +89,8 @@ const updateRoom = async (req, res) => {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 };
+
+
 
 // Delete a room (Admin only)
 const deleteRoom = async (req, res) => {
