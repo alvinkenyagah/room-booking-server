@@ -13,9 +13,9 @@ const {
 const { protect, isAdmin } = require('../middleware/authMiddleware');
 
 
+router.post('/calculate', calculateBookingCost); // Calculate booking cost without creating a booking
 // All routes should be protected with authentication
 router.use(protect);
-router.post('/calculate', calculateBookingCost); // Calculate booking cost without creating a booking
 
 // Regular user routes
 router.post('/', createBooking);  // Create a new booking
